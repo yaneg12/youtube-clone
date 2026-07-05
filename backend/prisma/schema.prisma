@@ -1,0 +1,356 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum VideoStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum LiveStreamStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+}
+
+enum NotificationType {
+  NEW_SUBSCRIBER
+  NEW_VIDEO
+  NEW_COMMENT
+  LIKE
+}
+
+enum LikeableType {
+  VIDEO
+  SHORT
+  COMMENT
+}
+
+enum LikeType {
+  LIKE
+  DISLIKE
+}
+
+enum AdCampaignStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  username        String   @unique
+  passwordHash    String
+  displayName     String?
+  avatarUrl       String?
+  bio             String?
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  channel         Channel?
+  videos          Video[]
+  shorts          Short[]
+  comments        Comment[]
+  likes           Like[]
+  subscriptions   Subscription[]
+  playlists       Playlist[]
+  watchHistory    WatchHistory[]
+  notifications   Notification[]
+  adImpressions   AdImpression[]
+
+  @@index([username])
+  @@index([email])
+}
+
+model Channel {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  description     String?
+  bannerUrl       String?
+  avatarUrl       String?
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  ownerId         String   @unique
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  videos          Video[]
+  shorts          Short[]
+  subscribers     Subscription[]
+  liveStreams     LiveStream[]
+  ads             AdCampaign[]
+
+  @@index([slug])
+  @@index([ownerId])
+}
+
+model Video {
+  id              String      @id @default(cuid())
+  title           String
+  description     String?
+  thumbnailUrl    String?
+  videoUrl        String
+  duration        Int?
+  views           Int         @default(0)
+  status          VideoStatus @default(UPLOADING)
+  publishedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  channelId       String
+  channel         Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  ownerId         String
+  owner           User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  comments        Comment[]
+  likes           Like[]
+  playlists       PlaylistVideo[]
+  watchHistory    WatchHistory[]
+  adImpressions   AdImpression[]
+
+  @@index([channelId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([publishedAt])
+}
+
+model Short {
+  id              String      @id @default(cuid())
+  title           String
+  description     String?
+  thumbnailUrl    String?
+  videoUrl        String
+  duration        Int?
+  views           Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  channelId       String
+  channel         Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  ownerId         String
+  owner           User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  comments        Comment[]
+  likes           Like[]
+  watchHistory    WatchHistory[]
+  adImpressions   AdImpression[]
+
+  @@index([channelId])
+  @@index([ownerId])
+  @@index([createdAt])
+}
+
+model Comment {
+  id              String      @id @default(cuid())
+  content         String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  authorId        String
+  author          User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  parentId        String?
+  parent          Comment?    @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies         Comment[]   @relation("CommentReplies")
+
+  videoId         String?
+  video           Video?      @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  shortId         String?
+  short           Short?      @relation(fields: [shortId], references: [id], onDelete: Cascade)
+
+  likes           Like[]
+
+  @@index([authorId])
+  @@index([videoId])
+  @@index([shortId])
+  @@index([parentId])
+  @@index([createdAt])
+}
+
+model Like {
+  id              String        @id @default(cuid())
+  type            LikeType      @default(LIKE)
+  likeableType    LikeableType
+  likeableId      String
+  createdAt       DateTime      @default(now())
+
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  videoId         String?
+  video           Video?        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  shortId         String?
+  short           Short?        @relation(fields: [shortId], references: [id], onDelete: Cascade)
+
+  commentId       String?
+  comment         Comment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, likeableType, likeableId])
+  @@unique([userId, videoId])
+  @@unique([userId, shortId])
+  @@unique([userId, commentId])
+  @@index([userId, likeableType, likeableId])
+  @@index([videoId])
+  @@index([shortId])
+  @@index([commentId])
+}
+
+model Subscription {
+  id              String      @id @default(cuid())
+  createdAt       DateTime    @default(now())
+
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  channelId       String
+  channel         Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@index([channelId])
+}
+
+model Playlist {
+  id              String      @id @default(cuid())
+  name            String
+  description     String?
+  isPublic        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  ownerId         String
+  owner           User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  videos          PlaylistVideo[]
+
+  @@index([ownerId])
+}
+
+model PlaylistVideo {
+  id              String      @id @default(cuid())
+  position        Int
+  addedAt         DateTime    @default(now())
+
+  playlistId      String
+  playlist        Playlist    @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  videoId         String
+  video           Video       @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, videoId])
+  @@index([playlistId])
+  @@index([videoId])
+}
+
+model WatchHistory {
+  id              String      @id @default(cuid())
+  watchedAt       DateTime    @default(now())
+
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  videoId         String?
+  video           Video?      @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  shortId         String?
+  short           Short?      @relation(fields: [shortId], references: [id], onDelete: Cascade)
+
+  @@index([userId, watchedAt])
+  @@index([videoId])
+  @@index([shortId])
+}
+
+model Notification {
+  id              String            @id @default(cuid())
+  type            NotificationType
+  content         String
+  isRead          Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model LiveStream {
+  id              String            @id @default(cuid())
+  title           String
+  description     String?
+  streamKey       String            @unique
+  status          LiveStreamStatus  @default(SCHEDULED)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  channelId       String
+  channel         Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AdCampaign {
+  id              String            @id @default(cuid())
+  name            String
+  advertiserName  String?
+  budget          Int
+  startDate       DateTime
+  endDate         DateTime?
+  status          AdCampaignStatus  @default(ACTIVE)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  channelId       String
+  channel         Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  impressions     AdImpression[]
+
+  @@index([channelId])
+  @@index([status])
+}
+
+model AdImpression {
+  id              String      @id @default(cuid())
+  viewedAt        DateTime    @default(now())
+  createdAt       DateTime    @default(now())
+
+  campaignId      String
+  campaign        AdCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  userId          String?
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  videoId         String?
+  video           Video?      @relation(fields: [videoId], references: [id], onDelete: SetNull)
+
+  shortId         String?
+  short           Short?      @relation(fields: [shortId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId])
+  @@index([userId])
+  @@index([videoId])
+  @@index([shortId])
+  @@index([viewedAt])
+  @@index([createdAt])
+}
